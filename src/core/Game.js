@@ -99,6 +99,7 @@ export class Game {
   // ── Bootstrap ──────────────────────────────────────────────────────────────
 
   start() {
+    this._lastTime = performance.now();
     requestAnimationFrame(t => this._loop(t));
   }
 
@@ -161,18 +162,19 @@ export class Game {
       this._update();
       this._physicsAccum -= stepMs;
     }
-    this.renderer.render();
+    this.renderer.render(this._physicsAccum / stepMs);
     requestAnimationFrame(t => this._loop(t));
   }
 
   _update() {
     switch (this.state) {
-      case STATE.AIMING:      this._updateAiming();      break;
-      case STATE.SHOOTING:    this._updateShooting();    break;
-      case STATE.ROUND_END:   this._updateRoundEnd();    break;
-      case STATE.FINAL_CATCH: this._updateFinalCatch();  break;
-      case STATE.FEVER:       this._updateFever();       break;
-      case STATE.LEVEL_CLEAR: this._updateLevelClear();  break;
+      case STATE.MENU:        this.screens.updateMenu();  break;
+      case STATE.AIMING:      this._updateAiming();       break;
+      case STATE.SHOOTING:    this._updateShooting();     break;
+      case STATE.ROUND_END:   this._updateRoundEnd();     break;
+      case STATE.FINAL_CATCH: this._updateFinalCatch();   break;
+      case STATE.FEVER:       this._updateFever();        break;
+      case STATE.LEVEL_CLEAR: this._updateLevelClear();   break;
     }
     if (this.bucket.visible) this.bucket.update();
     this.particles.update();

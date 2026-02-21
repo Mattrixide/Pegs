@@ -12,6 +12,10 @@ export class PhysicsSystem {
     // Safety: kill stuck balls
     if (ball.frameCount > MAX_BALL_FRAMES) return 'exited';
 
+    // Snapshot position before this step so the renderer can interpolate
+    ball.prevPos.x = ball.pos.x;
+    ball.prevPos.y = ball.pos.y;
+
     // Gravity
     ball.vel.y += GRAVITY;
 

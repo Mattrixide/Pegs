@@ -10,6 +10,57 @@ export class Screens {
 
   // ── Menu ──────────────────────────────────────────────────────────────────
 
+  // Physics-only update for the menu ball — called from the fixed-timestep
+  // accumulator in Game._update() so it runs at exactly 60 steps/second
+  // regardless of display refresh rate.
+  updateMenu() {
+    const { game } = this;
+    const { width, height } = game.canvas;
+    const cy = height * 0.38;
+
+    if (!this._titlePegs) this._titlePegs = this._buildTitlePegs(width, cy - 20);
+
+    const b = this._menuBall;
+    if (!b || b.y - b.r > height || b._fadeOut >= 30) {
+      this._menuBall = {
+        x: width / 2 + (Math.random() - 0.5) * 160,
+        y: -10, vx: (Math.random() - 0.5) * 3, vy: 1.5,
+        r: 7, trail: [], _stuckFrames: 0, _fadeOut: 0,
+      };
+    }
+    const ball = this._menuBall;
+
+    const speed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
+    if (speed < 0.4) ball._stuckFrames++;
+    else             ball._stuckFrames = 0;
+    if (ball._stuckFrames >= 90) ball._fadeOut++;
+
+    ball.trail.push({ x: ball.x, y: ball.y });
+    if (ball.trail.length > 10) ball.trail.shift();
+    ball.vy += 0.22;
+    ball.x  += ball.vx;
+    ball.y  += ball.vy;
+    if (ball.x - ball.r < 0)     { ball.x = ball.r;         ball.vx =  Math.abs(ball.vx); }
+    if (ball.x + ball.r > width) { ball.x = width - ball.r; ball.vx = -Math.abs(ball.vx); }
+    for (const peg of this._titlePegs) {
+      const dx = ball.x - peg.x, dy = ball.y - peg.y;
+      const d  = Math.sqrt(dx * dx + dy * dy);
+      const minD = ball.r + peg.r;
+      if (d < minD && d > 0) {
+        const nx = dx / d, ny = dy / d;
+        ball.x = peg.x + nx * (minD + 0.5);
+        ball.y = peg.y + ny * (minD + 0.5);
+        const dot = ball.vx * nx + ball.vy * ny;
+        if (dot < 0) {
+          ball.vx -= 2 * dot * nx;
+          ball.vy -= 2 * dot * ny;
+          ball.vx *= 0.75;
+          ball.vy *= 0.75;
+        }
+      }
+    }
+  }
+
   drawMenu(stars) {
     const { ctx, game } = this;
     const { width, height } = game.canvas;
@@ -33,48 +84,10 @@ export class Screens {
     // ── Animated PEGS title + bouncing ball ─────────────────────────────
     if (!this._titlePegs) this._titlePegs = this._buildTitlePegs(width, cy - 20);
 
-    // Spawn / reset ball
-    const b = this._menuBall;
-    if (!b || b.y - b.r > height || b._fadeOut >= 30) {
-      this._menuBall = {
-        x: width / 2 + (Math.random() - 0.5) * 160,
-        y: -10, vx: (Math.random() - 0.5) * 3, vy: 1.5,
-        r: 7, trail: [], _stuckFrames: 0, _fadeOut: 0,
-      };
-    }
     const ball = this._menuBall;
+    if (!ball) return;
 
-    // Only count as "stuck" when speed is very low; reset counter when moving
-    const speed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
-    if (speed < 0.4) ball._stuckFrames++;
-    else             ball._stuckFrames = 0;
-    if (ball._stuckFrames >= 90) ball._fadeOut++;
     const ballAlpha = ball._fadeOut > 0 ? Math.max(0, 1 - ball._fadeOut / 30) : 1;
-
-    ball.trail.push({ x: ball.x, y: ball.y });
-    if (ball.trail.length > 10) ball.trail.shift();
-    ball.vy += 0.22;
-    ball.x  += ball.vx;
-    ball.y  += ball.vy;
-    if (ball.x - ball.r < 0)    { ball.x = ball.r;         ball.vx =  Math.abs(ball.vx); }
-    if (ball.x + ball.r > width) { ball.x = width - ball.r; ball.vx = -Math.abs(ball.vx); }
-    for (const peg of this._titlePegs) {
-      const dx = ball.x - peg.x, dy = ball.y - peg.y;
-      const d  = Math.sqrt(dx * dx + dy * dy);
-      const minD = ball.r + peg.r;
-      if (d < minD && d > 0) {
-        const nx = dx / d, ny = dy / d;
-        ball.x = peg.x + nx * (minD + 0.5);
-        ball.y = peg.y + ny * (minD + 0.5);
-        const dot = ball.vx * nx + ball.vy * ny;
-        if (dot < 0) {
-          ball.vx -= 2 * dot * nx;
-          ball.vy -= 2 * dot * ny;
-          ball.vx *= 0.75;
-          ball.vy *= 0.75;
-        }
-      }
-    }
 
     ctx.save();
     ctx.globalAlpha = ballAlpha;

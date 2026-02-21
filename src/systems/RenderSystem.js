@@ -22,7 +22,8 @@ export class RenderSystem {
   //  Main render dispatch
   // ─────────────────────────────────────────────────────────────────────────
 
-  render() {
+  render(alpha = 1) {
+    this._alpha = alpha;
     const { ctx, game } = this;
     const { width, height } = game.canvas;
     ctx.clearRect(0, 0, width, height);
@@ -1423,8 +1424,13 @@ export class RenderSystem {
 
   _renderOneBall(ctx, ball) {
     const r  = ball.radius;
-    const hx = ball.pos.x - r * 0.28;
-    const hy = ball.pos.y - r * 0.38;
+    // Interpolate between the previous and current physics positions so the
+    // ball renders smoothly at any display refresh rate.
+    const a  = this._alpha ?? 1;
+    const bx = ball.prevPos.x + (ball.pos.x - ball.prevPos.x) * a;
+    const by = ball.prevPos.y + (ball.pos.y - ball.prevPos.y) * a;
+    const hx = bx - r * 0.28;
+    const hy = by - r * 0.38;
 
     // Trail
     ball.trail.forEach((pos, i) => {
@@ -1442,13 +1448,13 @@ export class RenderSystem {
     ctx.shadowBlur  = 22;
 
     // Sphere body
-    const sphGrad = ctx.createRadialGradient(hx, hy, r * 0.04, ball.pos.x, ball.pos.y, r);
+    const sphGrad = ctx.createRadialGradient(hx, hy, r * 0.04, bx, by, r);
     sphGrad.addColorStop(0.00, '#ddeeff');
     sphGrad.addColorStop(0.25, '#99bbee');
     sphGrad.addColorStop(0.65, '#4466aa');
     sphGrad.addColorStop(1.00, '#0e1e44');
     ctx.beginPath();
-    ctx.arc(ball.pos.x, ball.pos.y, r, 0, Math.PI * 2);
+    ctx.arc(bx, by, r, 0, Math.PI * 2);
     ctx.fillStyle = sphGrad;
     ctx.fill();
 

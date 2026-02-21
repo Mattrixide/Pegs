@@ -1,6 +1,7 @@
 export class Ball {
   constructor(x, y, vx, vy) {
-    this.pos = { x, y };
+    this.pos     = { x, y };
+    this.prevPos = { x, y };
     this.vel = { x: vx, y: vy };
     this.radius = 8;
     this.trail = [];
