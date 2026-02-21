@@ -1,5 +1,19 @@
 import { SKILLS } from '../core/Game.js';
 
+// Per-ball skill colours used inside the Ball-O-Tron tube
+const SKILL_BALL_COLORS = {
+  superGuide: { dark:'#1a6632', mid:'#29aa55', bright:'#44ff88', spec:'#ccffee',
+                badge:{ hi:'#aaffbb', mid:'#33bb55', dark:'#0d6622', edge:'#041a0a', glow:'0,200,60',  rim:'80,255,120'  }, color:'#44ff88', label:'SUPER GUIDE' },
+  spookyBall: { dark:'#2a0066', mid:'#7700dd', bright:'#aa00ff', spec:'#e8bbff',
+                badge:{ hi:'#cc88ff', mid:'#7700dd', dark:'#2a0066', edge:'#0d0022', glow:'150,0,255', rim:'170,0,255' }, color:'#aa00ff', label:'SPOOKY BALL' },
+  lightning:  { dark:'#001a44', mid:'#0055cc', bright:'#44aaff', spec:'#e0f0ff',
+                badge:{ hi:'#aaddff', mid:'#0066cc', dark:'#001a44', edge:'#000a1a', glow:'0,120,255',  rim:'60,160,255'  }, color:'#44aaff', label:'LIGHTNING'   },
+  multiball:  { dark:'#6e2a00', mid:'#cc5500', bright:'#ff8844', spec:'#fff0e0',
+                badge:{ hi:'#ffddaa', mid:'#dd8833', dark:'#663311', edge:'#1a0a04', glow:'220,130,30', rim:'255,170,60'  }, color:'#ff8844', label:'MULTI BALL'  },
+};
+const NORMAL_BALL_COLORS = { dark:'#1a1a1a', mid:'#707070', bright:'#cccccc', spec:'#f0f0f0' };
+const NORMAL_BADGE = { hi:'#e8e8e8', mid:'#909090', dark:'#404040', edge:'#0a0a0a', glow:'160,160,160', rim:'200,200,200' };
+
 export class HUD {
   constructor(game) {
     this.game = game;
@@ -99,33 +113,31 @@ export class HUD {
     // Low-ball pulse factor (shared across all parts)
     const lp = isLow ? 0.5 + 0.5 * Math.sin(Date.now() / 200) : 0;
 
-    // Skill badge colour palette
-    const SKILL_BADGE = {
-      superGuide: { hi: '#aaffbb', mid: '#33bb55', dark: '#0d6622', edge: '#041a0a', glow: '0,200,60', rim: '80,255,120' },
-      spookyBall: { hi: '#ccccdd', mid: '#778899', dark: '#334455', edge: '#111822', glow: '150,160,180', rim: '180,190,210' },
-      lightning:  { hi: '#aaccff', mid: '#3366cc', dark: '#112266', edge: '#040e22', glow: '60,120,255', rim: '100,160,255' },
-      multiball:  { hi: '#ffddaa', mid: '#dd8833', dark: '#663311', edge: '#1a0a04', glow: '220,130,30', rim: '255,170,60' },
-    };
-    const sc = SKILL_BADGE[game.activeSkill] || SKILL_BADGE.superGuide;
-    const skillMeta = SKILLS.find(s => s.id === game.activeSkill);
+    // Next-ball slot drives the label + badge colour
+    const nextSlotIdx  = 10 - count;
+    const nextSkillId  = game.ballSlots[nextSlotIdx] ?? null;
+    const nextSkillDef = nextSkillId ? SKILL_BALL_COLORS[nextSkillId] : null;
+    const sc           = nextSkillDef ? nextSkillDef.badge : NORMAL_BADGE;
+    const labelText    = nextSkillDef ? nextSkillDef.label : 'NORMAL';
+    const labelColor   = nextSkillDef ? nextSkillDef.color : '#ffcc66';
 
-    // ── Skill name label ─────────────────────────────────────────
+    // ── Next-ball label ───────────────────────────────────────────
     ctx.shadowColor  = isLow ? `rgba(255,60,40,${0.5 + 0.5 * lp})` : `rgba(${sc.glow},0.65)`;
     ctx.shadowBlur   = isLow ? 8 : 4;
-    ctx.fillStyle    = isLow ? `rgba(255,100,80,${0.7 + 0.3 * lp})` : skillMeta.color;
+    ctx.fillStyle    = isLow ? `rgba(255,100,80,${0.7 + 0.3 * lp})` : labelColor;
     ctx.font         = 'bold 8px Arial';
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'middle';
-    const words = skillMeta.label.split(' ');
+    const words = labelText.split(' ');
     if (words.length >= 2) {
       ctx.fillText(words[0], cx, labelTop + 3);
       ctx.fillText(words.slice(1).join(' '), cx, labelTop + 13);
     } else {
-      ctx.fillText(skillMeta.label, cx, labelTop + labelH / 2);
+      ctx.fillText(labelText, cx, labelTop + labelH / 2);
     }
     ctx.shadowBlur   = 0;
 
-    // ── Count badge (skill-coloured) ─────────────────────────────
+    // ── Count badge (next-ball colour) ────────────────────────────
     if (isLow) {
       ctx.shadowColor = `rgba(255,50,30,${0.5 + 0.5 * lp})`;
       ctx.shadowBlur  = 12;
@@ -223,8 +235,10 @@ export class HUD {
     this._roundRect(tubeL, tubeTop, tubeW, tubeH, 3);
     ctx.fill();
 
-    // ── Stacked orange/amber ball spheres ─────────────────────────
-    const visible = Math.min(count, maxVis);
+    // ── Stacked ball spheres (each coloured by its skill slot) ────
+    const visible  = Math.min(count, maxVis);
+    // remaining[0] = next to fire (drawn at bottom, i=0)
+    const remaining = game.ballSlots.slice(10 - count);
 
     for (let i = 0; i < visible; i++) {
       const bx = cx;
@@ -232,20 +246,24 @@ export class HUD {
       const hx = bx - ballR * 0.3;
       const hy = by - ballR * 0.35;
 
-      ctx.shadowColor = isLow ? '#ff4444' : '#ff8800';
+      const slotSkill = remaining[i] ?? null;
+      const bc        = slotSkill ? SKILL_BALL_COLORS[slotSkill] : null;
+
+      ctx.shadowColor = bc ? bc.bright : NORMAL_BALL_COLORS.bright;
       ctx.shadowBlur  = 5;
 
       const g = ctx.createRadialGradient(hx, hy, ballR * 0.05, bx, by, ballR);
-      if (isLow) {
-        g.addColorStop(0.00, '#fff0cc');
-        g.addColorStop(0.25, '#ffaa44');
-        g.addColorStop(0.65, '#dd3300');
-        g.addColorStop(1.00, '#280800');
+      if (bc) {
+        g.addColorStop(0.00, bc.spec);
+        g.addColorStop(0.25, bc.bright);
+        g.addColorStop(0.65, bc.mid);
+        g.addColorStop(1.00, bc.dark);
       } else {
-        g.addColorStop(0.00, '#fff5cc');
-        g.addColorStop(0.25, '#ffcc44');
-        g.addColorStop(0.65, '#ee7700');
-        g.addColorStop(1.00, '#2c0c00');
+        // Normal ball — silver
+        g.addColorStop(0.00, NORMAL_BALL_COLORS.spec);
+        g.addColorStop(0.25, NORMAL_BALL_COLORS.bright);
+        g.addColorStop(0.65, NORMAL_BALL_COLORS.mid);
+        g.addColorStop(1.00, NORMAL_BALL_COLORS.dark);
       }
       ctx.beginPath();
       ctx.arc(bx, by, ballR, 0, Math.PI * 2);
@@ -572,7 +590,7 @@ export class HUD {
 
     rects.forEach(({ skill, x, y, w, h }) => {
       const sd       = SKILLS.find(s => s.id === skill);
-      const isActive = game.activeSkill === skill;
+      const isActive = game.currentBallSkill === skill;
 
       ctx.save();
       ctx.shadowColor  = isActive ? sd.color : 'transparent';

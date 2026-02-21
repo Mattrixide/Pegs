@@ -77,11 +77,13 @@ export class Game {
     this.mouse              = { x: canvas.width / 2, y: canvas.height };
     this.superGuideActive   = false;    // super guide skill active this round
     this.finalBucketsActive = false;
-    this.activeSkill        = 'superGuide';
     this.bgOverride         = null;        // test-level background override (level id)
     this.spookyActive       = false;    // spooky ball has been triggered
     this.spookyUsed         = false;    // spooky teleport already used this ball
     this.lightningData      = null;     // { source, targets[], timer, maxTimer }
+    this.ballSlots          = [];       // per-ball skill assignments (null = normal)
+    this.currentBallSkill   = null;     // skill of the ball currently in play
+    this.ballPegHitCount    = 0;        // peg hits this ball (lightning/multiball trigger)
 
     // Timers
     this.roundEndTimer   = 0;
@@ -114,12 +116,15 @@ export class Game {
     this.spookyActive       = false;
     this.spookyUsed         = false;
     this.lightningData      = null;
+    this.currentBallSkill   = null;
+    this.ballPegHitCount    = 0;
     this.bucket.visible     = true;
     this.bucket.x           = this.canvas.width / 2;
     this.score.reset();
     this.particles.clear();
     this.bgOverride = null;
     this.levelSystem.load(levelIndex);
+    this._generateBallSlots();
     this._setState(STATE.AIMING);
   }
 
@@ -131,11 +136,25 @@ export class Game {
     this.spookyActive       = false;
     this.spookyUsed         = false;
     this.lightningData      = null;
+    this.currentBallSkill   = null;
+    this.ballPegHitCount    = 0;
     this.bucket.visible     = true;
     this.bucket.x           = this.canvas.width / 2;
     this.levelSystem.load(this.levelSystem.currentIndex + 1);
     this.particles.clear();
+    this._generateBallSlots();
     this._setState(STATE.AIMING);
+  }
+
+  _generateBallSlots() {
+    const slots    = Array(10).fill(null);
+    const skillIds = SKILLS.map(s => s.id);
+    // Pick exactly 4 random positions for skill balls
+    const positions = [...Array(10).keys()].sort(() => Math.random() - 0.5).slice(0, 4);
+    positions.forEach(i => {
+      slots[i] = skillIds[Math.floor(Math.random() * skillIds.length)];
+    });
+    this.ballSlots = slots;
   }
 
   // ── Main loop ──────────────────────────────────────────────────────────────
@@ -189,6 +208,8 @@ export class Game {
   // ── State updates ──────────────────────────────────────────────────────────
 
   _updateAiming() {
+    const nextSlotIdx     = 10 - this.ballCount;
+    this.superGuideActive = this.ballSlots[nextSlotIdx] === 'superGuide';
     this.launcher.setAngleFromMouse(this.mouse.x, this.mouse.y);
   }
 
@@ -219,6 +240,17 @@ export class Game {
           this.audio.playPegHit(peg.type);
           if (peg.type === 'green') this._activateSkill(ball, peg);
         });
+
+        // Lightning / Multiball — trigger on every 3rd peg hit this ball
+        if (this.currentBallSkill === 'lightning' || this.currentBallSkill === 'multiball') {
+          const prev = this.ballPegHitCount;
+          this.ballPegHitCount += result.hitPegs.length;
+          if (Math.floor(this.ballPegHitCount / 3) > Math.floor(prev / 3)) {
+            const src = result.hitPegs[0];
+            if (this.currentBallSkill === 'lightning') this._activateLightning(src);
+            if (this.currentBallSkill === 'multiball') this._activateMultiball(ball, src);
+          }
+        }
 
         // Check if all orange pegs have been hit this step
         if (!finalCatchTriggered) {
@@ -267,7 +299,7 @@ export class Game {
 
       // Spooky ball — teleport from bottom back to top (once per activation)
       if (result === 'exited' &&
-          this.activeSkill === 'spookyBall' &&
+          this.currentBallSkill === 'spookyBall' &&
           this.spookyActive && !this.spookyUsed &&
           ball.pos.y > this.canvas.height) {
         ball.pos.y     = 56 + ball.radius;
@@ -291,7 +323,7 @@ export class Game {
   // ── Skill activation ───────────────────────────────────────────────────────
 
   _activateSkill(ball, greenPeg) {
-    switch (this.activeSkill) {
+    switch (this.currentBallSkill) {
       case 'superGuide':
         this.superGuideActive = true;
         break;
@@ -530,11 +562,6 @@ export class Game {
           // Close help overlay on any click
           if (this.screens._showHelp) { this.screens._showHelp = false; return; }
 
-          // Skill buttons take priority
-          const skillRects = this.screens.getSkillButtonRects(this.canvas.width, this.canvas.height);
-          const hitSkill   = skillRects.find(r => hit(r));
-          if (hitSkill) { this.activeSkill = hitSkill.skill; return; }
-
           const rects = this.screens.getMenuButtonRects(this.canvas.width, this.canvas.height);
           if (hit(rects.gear))       this.startGame(TEST_LEVEL_INDEX);
           else if (hit(rects.help))  this.screens._showHelp = true;
@@ -542,23 +569,8 @@ export class Game {
           break;
         }
         case STATE.AIMING: {
-          // Click on Ball-O-Tron badge — cycle skill
-          {
-            const br = this.hud.getBadgeHitArea(this.canvas);
-            const bdx = mx - br.cx, bdy = my - br.cy;
-            if (bdx * bdx + bdy * bdy <= br.r * br.r) {
-              const idx = SKILLS.findIndex(s => s.id === this.activeSkill);
-              this.activeSkill = SKILLS[(idx + 1) % SKILLS.length].id;
-              return;
-            }
-          }
-
-          // Test level: check skill switcher buttons before firing
+          // Test level: background switcher buttons
           if (this.isTestLevel) {
-            const skillRects = this.hud.getTestSkillButtonRects(this.canvas);
-            const hitSkill   = skillRects.find(r => hit(r));
-            if (hitSkill) { this.activeSkill = hitSkill.skill; return; }
-
             const bgRects = this.hud.getTestBgButtonRects(this.canvas);
             const hitBg   = bgRects.find(r => hit(r));
             if (hitBg) { this.bgOverride = hitBg.bgId; return; }
@@ -574,11 +586,14 @@ export class Game {
 
   _fireBall() {
     if (this.ballCount <= 0) return;
+    const slotIdx         = 10 - this.ballCount;
+    this.currentBallSkill = this.ballSlots[slotIdx] ?? null;
+    this.ballPegHitCount  = 0;
     const launch = this.launcher.fire();
     this.balls        = [new Ball(launch.x, launch.y, launch.vx, launch.vy)];
     this.ballCount--;
     this.superGuideActive = false;
-    this.spookyActive     = false;
+    this.spookyActive     = this.currentBallSkill === 'spookyBall';
     this.spookyUsed       = false;
     this.lightningData    = null;
     this._setState(STATE.SHOOTING);

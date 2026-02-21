@@ -1432,27 +1432,47 @@ export class RenderSystem {
     const hx = bx - r * 0.28;
     const hy = by - r * 0.38;
 
-    // Trail
+    // Trail — hue matches skill colour; normal ball gets a neutral grey trail
+    const SKILL_HUE = { superGuide: 145, spookyBall: 280, lightning: 210, multiball: 25 };
+    const trailHue  = SKILL_HUE[this.game.currentBallSkill] ?? 0;
+    const trailSat = this.game.currentBallSkill ? 70 : 0;
     ball.trail.forEach((pos, i) => {
       const t  = (i + 1) / ball.trail.length;
       const tr = r * 0.85 * t;
       const L  = 55 + 20 * t;
       ctx.beginPath();
       ctx.arc(pos.x, pos.y, tr, 0, Math.PI * 2);
-      ctx.fillStyle = `hsla(210,70%,${L}%,${(t * 0.45).toFixed(2)})`;
+      ctx.fillStyle = `hsla(${trailHue},${trailSat}%,${L}%,${(t * 0.45).toFixed(2)})`;
       ctx.fill();
     });
 
+    // Skill-specific sphere colours (normal ball = silver)
+    const SKILL_SPHERE = {
+      superGuide: { glow:'#44ff88', c0:'#ccffee', c1:'#44ff88', c2:'#29aa55', c3:'#0d3318' },
+      spookyBall: { glow:'#aa00ff', c0:'#e8bbff', c1:'#aa00ff', c2:'#7700dd', c3:'#2a0066' },
+      lightning:  { glow:'#44aaff', c0:'#e0f0ff', c1:'#44aaff', c2:'#0055cc', c3:'#001133' },
+      multiball:  { glow:'#ff8844', c0:'#fff0e0', c1:'#ff8844', c2:'#cc5500', c3:'#2c0e00' },
+    };
+    const sk = SKILL_SPHERE[this.game.currentBallSkill] ?? null;
+
     ctx.save();
-    ctx.shadowColor = '#88aaff';
+    ctx.shadowColor = sk ? sk.glow : '#aaaaaa';
     ctx.shadowBlur  = 22;
 
     // Sphere body
     const sphGrad = ctx.createRadialGradient(hx, hy, r * 0.04, bx, by, r);
-    sphGrad.addColorStop(0.00, '#ddeeff');
-    sphGrad.addColorStop(0.25, '#99bbee');
-    sphGrad.addColorStop(0.65, '#4466aa');
-    sphGrad.addColorStop(1.00, '#0e1e44');
+    if (sk) {
+      sphGrad.addColorStop(0.00, sk.c0);
+      sphGrad.addColorStop(0.25, sk.c1);
+      sphGrad.addColorStop(0.65, sk.c2);
+      sphGrad.addColorStop(1.00, sk.c3);
+    } else {
+      // Normal ball — silver
+      sphGrad.addColorStop(0.00, '#f0f0f0');
+      sphGrad.addColorStop(0.25, '#cccccc');
+      sphGrad.addColorStop(0.65, '#707070');
+      sphGrad.addColorStop(1.00, '#1a1a1a');
+    }
     ctx.beginPath();
     ctx.arc(bx, by, r, 0, Math.PI * 2);
     ctx.fillStyle = sphGrad;
@@ -1770,18 +1790,30 @@ export class RenderSystem {
     ctx.fillStyle  = '#aabbcc';
     ctx.fillRect(5, -bw - 1, 10, 2);
 
-    // Base pivot — radial gradient metallic sphere
+    // Base pivot — coloured by the next/active ball's skill
+    const PIVOT_COLORS = {
+      superGuide: { hi:'#ccffee', mid:'#29aa55', dark:'#0d3318', glow:'#44ff88', rim:'#44ff88' },
+      spookyBall: { hi:'#e8bbff', mid:'#7700dd', dark:'#2a0066', glow:'#aa00ff', rim:'#aa00ff' },
+      lightning:  { hi:'#e0f0ff', mid:'#0055cc', dark:'#001133', glow:'#44aaff', rim:'#44aaff' },
+      multiball:  { hi:'#fff0e0', mid:'#cc5500', dark:'#2c0e00', glow:'#ff8844', rim:'#ff8844' },
+    };
+    // During aiming show next ball's slot; during shooting show current ball
+    const pivotSkillId = game.state === 'SHOOTING'
+      ? game.currentBallSkill
+      : (game.ballSlots[10 - game.ballCount] ?? null);
+    const pc = PIVOT_COLORS[pivotSkillId] ?? { hi:'#e0e0e0', mid:'#888888', dark:'#1a1a1a', glow:'#aaaaaa', rim:'#cccccc' };
+
     const baseGrad = ctx.createRadialGradient(-5, -5, 2, 0, 0, 17);
-    baseGrad.addColorStop(0,   '#ccd8ee');
-    baseGrad.addColorStop(0.4, '#7788aa');
-    baseGrad.addColorStop(1,   '#1a2233');
-    ctx.shadowColor = '#3344aa';
+    baseGrad.addColorStop(0,   pc.hi);
+    baseGrad.addColorStop(0.4, pc.mid);
+    baseGrad.addColorStop(1,   pc.dark);
+    ctx.shadowColor = pc.glow;
     ctx.shadowBlur  = 18;
     ctx.beginPath();
     ctx.arc(0, 0, 17, 0, Math.PI * 2);
     ctx.fillStyle = baseGrad;
     ctx.fill();
-    ctx.strokeStyle = '#8899bb';
+    ctx.strokeStyle = pc.rim + '99';
     ctx.lineWidth   = 1.5;
     ctx.stroke();
 
