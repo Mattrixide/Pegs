@@ -23,3 +23,14 @@ html, body {
     0 0 40px rgba(80, 60, 200, 0.45),
     0 0 80px rgba(40, 20, 120, 0.25);
 }
+
+/* ── Mobile: scale canvas to fill the viewport ───────────────────────────── */
+@media (pointer: coarse) {
+  #game-canvas {
+    /* Scale to fit the screen while preserving the 780×640 aspect ratio.
+       min() picks whichever dimension runs out first (width or height). */
+    width:  min(100vw, calc(100vh * (780 / 640)));
+    height: min(100vh, calc(100vw * (640 / 780)));
+    cursor: none;
+  }
+}

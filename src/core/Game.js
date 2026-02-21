@@ -552,11 +552,50 @@ export class Game {
   // ── Input ──────────────────────────────────────────────────────────────────
 
   _setupInput() {
-    this.canvas.addEventListener('mousemove', e => {
-      const r = this.canvas.getBoundingClientRect();
-      this.mouse.x = (e.clientX - r.left) * (this.canvas.width  / r.width);
-      this.mouse.y = (e.clientY - r.top)  * (this.canvas.height / r.height);
-    });
+    const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+
+    // ── Mouse (desktop only) ──────────────────────────────────────────────────
+    if (!isMobile) {
+      this.canvas.addEventListener('mousemove', e => {
+        const r = this.canvas.getBoundingClientRect();
+        this.mouse.x = (e.clientX - r.left) * (this.canvas.width  / r.width);
+        this.mouse.y = (e.clientY - r.top)  * (this.canvas.height / r.height);
+      });
+    }
+
+    // ── Touch (mobile) ────────────────────────────────────────────────────────
+    if (isMobile) {
+      // First tap → request fullscreen to hide the browser bar
+      let fullscreenRequested = false;
+      this.canvas.addEventListener('touchstart', e => {
+        e.preventDefault();
+        if (!fullscreenRequested) {
+          fullscreenRequested = true;
+          const el = document.documentElement;
+          if (el.requestFullscreen)            el.requestFullscreen();
+          else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+        }
+        // Mirror touch position to mouse for aiming
+        const t = e.touches[0];
+        const r = this.canvas.getBoundingClientRect();
+        this.mouse.x = (t.clientX - r.left) * (this.canvas.width  / r.width);
+        this.mouse.y = (t.clientY - r.top)  * (this.canvas.height / r.height);
+      }, { passive: false });
+
+      this.canvas.addEventListener('touchmove', e => {
+        e.preventDefault();
+        const t = e.touches[0];
+        const r = this.canvas.getBoundingClientRect();
+        this.mouse.x = (t.clientX - r.left) * (this.canvas.width  / r.width);
+        this.mouse.y = (t.clientY - r.top)  * (this.canvas.height / r.height);
+      }, { passive: false });
+
+      // touchend fires the click logic
+      this.canvas.addEventListener('touchend', e => {
+        e.preventDefault();
+        this.canvas.dispatchEvent(new MouseEvent('click'));
+      }, { passive: false });
+    }
 
     this.canvas.addEventListener('click', () => {
       const mx  = this.mouse.x, my = this.mouse.y;
