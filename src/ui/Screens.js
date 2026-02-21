@@ -210,13 +210,34 @@ export class Screens {
         x: width / 2 + (Math.random() - 0.5) * 160,
         y: -10, vx: (Math.random() - 0.5) * 3, vy: 1.5,
         r: 7, trail: [], _stuckFrames: 0, _fadeOut: 0,
+        _age: 0, _snapX: 0, _snapY: -10, _snapAge: 0,
       };
     }
     const ball = this._menuBall;
 
+    // Stuck detection — three layers:
+    // 1. Slow decay (not hard reset) so intermittent fast frames don't zero the counter
     const speed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
     if (speed < 0.4) ball._stuckFrames++;
-    else             ball._stuckFrames = 0;
+    else             ball._stuckFrames = Math.max(0, ball._stuckFrames - 1);
+
+    // 2. Position snapshot every 40 frames — catches oscillating balls with speed > 0.4
+    ball._age++;
+    if (ball._age - ball._snapAge >= 40) {
+      const moved = Math.hypot(ball.x - ball._snapX, ball.y - ball._snapY);
+      if (moved < 24) ball._stuckFrames += 20;
+      ball._snapX = ball.x; ball._snapY = ball.y; ball._snapAge = ball._age;
+    }
+
+    // 3. Escape impulse at 60 — try to break free before giving up entirely
+    if (ball._stuckFrames >= 60 && ball._stuckFrames < 62) {
+      ball.vx = (Math.random() - 0.5) * 4;
+      ball.vy = -4;
+      ball._stuckFrames = 30;
+    }
+
+    // 4. Hard age limit — guarantees respawn within ~6 s regardless
+    if (ball._age > 360) ball._fadeOut++;
     if (ball._stuckFrames >= 90) ball._fadeOut++;
 
     ball.trail.push({ x: ball.x, y: ball.y });
