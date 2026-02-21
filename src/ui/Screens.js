@@ -1,11 +1,195 @@
 
+import { loadHighScores, saveHighScore } from '../core/HighScores.js';
+
 export class Screens {
   constructor(game) {
     this.game = game;
     this.ctx  = game.ctx;
-    this._titlePegs = null;
-    this._menuBall  = null;
-    this._showHelp  = false;
+    this._titlePegs   = null;
+    this._menuBall    = null;
+    this._showHelp    = false;
+    this._highScores      = loadHighScores();
+    this._hsScrollIdx     = 0;
+    this._crawlY          = 10 * 40;    // put all 10 scores in view immediately
+    this._crawlStartTime  = performance.now(); // for framerate-independent time
+  }
+
+  addScore(score, initials = '???') {
+    this._highScores     = saveHighScore(score, initials);
+    this._hsScrollIdx    = 0;
+    this._crawlY         = 10 * 40;
+    this._crawlStartTime = performance.now();
+  }
+
+  // ── Initial entry ──────────────────────────────────────────────────────────
+
+  initInitialEntry(score, isVictory) {
+    this._ieScore     = score;
+    this._ieVictory   = isVictory;
+    this._initials    = ['A', 'A', 'A'];
+    this._initialsPos = 0;
+    this._ieBlink     = 0;
+    // Rank this score would achieve against current board
+    const higher  = this._highScores.filter(e => e.score > score).length;
+    const rank    = higher + 1;
+    this._ieRank  = (rank <= 10) ? rank : null;
+  }
+
+  tickInitialEntry() {
+    this._ieBlink = (this._ieBlink + 1) % 60;
+  }
+
+  // Returns up/down arrow hit-test rects for each of the 3 initial slots
+  getInitialEntryRects(width, height) {
+    const SLOT_X = [width / 2 - 100, width / 2, width / 2 + 100];
+    const boxTop = Math.round(height / 2) - 32;
+    const boxH   = 80;
+    return SLOT_X.map(cx => ({
+      up:   { x: cx - 20, y: boxTop - 36, w: 40, h: 28 },
+      down: { x: cx - 20, y: boxTop + boxH + 8,  w: 40, h: 28 },
+    }));
+  }
+
+  drawInitialEntry(stars) {
+    const { ctx, game } = this;
+    const { width, height } = game.canvas;
+    const cx     = width / 2;
+    const CHARS  = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const SLOT_X = [cx - 100, cx, cx + 100];
+    const boxTop = Math.round(height / 2) - 32;
+    const boxH   = 80;
+    const t      = Date.now();
+
+    // Background
+    const grad = ctx.createLinearGradient(0, 0, 0, height);
+    grad.addColorStop(0, '#060018');
+    grad.addColorStop(1, '#0e0030');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, width, height);
+
+    // Stars
+    stars.forEach(s => {
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255,255,255,${s.alpha})`;
+      ctx.fill();
+    });
+
+    // Scanlines
+    ctx.globalAlpha = 0.045;
+    ctx.fillStyle = '#000';
+    for (let y = 0; y < height; y += 3) ctx.fillRect(0, y, width, 1);
+    ctx.globalAlpha = 1;
+
+    ctx.save();
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Result header
+    const pulse = 0.8 + 0.2 * Math.sin(t / 280);
+    if (this._ieVictory) {
+      ctx.shadowColor = `rgba(255,200,0,${pulse * 0.9})`;
+      ctx.shadowBlur  = 22;
+      ctx.fillStyle   = `rgba(255,228,60,${pulse})`;
+      ctx.font        = 'bold 20px monospace';
+      ctx.fillText('ALL LEVELS COMPLETE!', cx, height / 2 - 205);
+    } else {
+      ctx.shadowColor = `rgba(255,50,50,${pulse * 0.8})`;
+      ctx.shadowBlur  = 22;
+      ctx.fillStyle   = `rgba(255,90,90,${pulse})`;
+      ctx.font        = 'bold 20px monospace';
+      ctx.fillText('GAME OVER', cx, height / 2 - 205);
+    }
+
+    // "ENTER YOUR INITIALS" title
+    ctx.shadowColor = `rgba(255,200,0,${pulse * 0.6})`;
+    ctx.shadowBlur  = 14;
+    ctx.fillStyle   = `rgba(255,215,50,${pulse})`;
+    ctx.font        = 'bold 16px monospace';
+    ctx.fillText('\u2500\u2500 ENTER YOUR INITIALS \u2500\u2500', cx, height / 2 - 174);
+
+    // Score
+    ctx.shadowColor = '#00ccff';
+    ctx.shadowBlur  = 12;
+    ctx.fillStyle   = 'rgba(160,210,255,0.85)';
+    ctx.font        = 'bold 11px monospace';
+    ctx.fillText('SCORE', cx, height / 2 - 142);
+    ctx.shadowColor = '#00eeff';
+    ctx.shadowBlur  = 16;
+    ctx.fillStyle   = '#00eeff';
+    ctx.font        = 'bold 26px monospace';
+    ctx.fillText(this._ieScore.toLocaleString(), cx, height / 2 - 112);
+
+    // Rank badge
+    if (this._ieRank !== null) {
+      const isTop = this._ieRank === 1;
+      ctx.shadowColor = isTop ? '#ffdd00' : '#ff88ff';
+      ctx.shadowBlur  = 16;
+      ctx.fillStyle   = isTop ? '#ffe040' : '#ff88ff';
+      ctx.font        = `bold 13px monospace`;
+      const label = isTop ? '\u2605 NEW HIGH SCORE \u2605' : `RANK  #${this._ieRank}  \u2014  TOP 10`;
+      ctx.fillText(label, cx, height / 2 - 76);
+    }
+
+    ctx.shadowBlur = 0;
+
+    // Character slots
+    SLOT_X.forEach((sx, si) => {
+      const isActive = si === this._initialsPos;
+      const isDone   = si < this._initialsPos;
+      const char     = this._initials[si];
+      const blink    = this._ieBlink < 30;
+      const arrowA   = isActive ? 1.0 : 0.28;
+
+      // Up arrow
+      ctx.globalAlpha  = arrowA;
+      ctx.shadowColor  = isActive ? '#00eeff' : 'transparent';
+      ctx.shadowBlur   = isActive ? 8 : 0;
+      ctx.fillStyle    = isActive ? '#00eeff' : '#2a4870';
+      ctx.font         = 'bold 18px monospace';
+      ctx.fillText('\u25b2', sx, boxTop - 22);
+      ctx.globalAlpha  = 1;
+      ctx.shadowBlur   = 0;
+
+      // Box
+      ctx.shadowColor = isActive ? '#00eeff' : 'transparent';
+      ctx.shadowBlur  = isActive ? 20 : 0;
+      ctx.strokeStyle = isActive ? '#00eeff' : (isDone ? '#2a5580' : '#162240');
+      ctx.lineWidth   = isActive ? 2.5 : 1.5;
+      ctx.fillStyle   = 'rgba(0,8,28,0.88)';
+      ctx.beginPath();
+      ctx.roundRect(sx - 34, boxTop, 68, boxH, 5);
+      ctx.fill();
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // Letter — blinks on active slot
+      if (!isActive || blink) {
+        ctx.shadowColor = isActive ? '#00ffff' : (isDone ? '#336688' : '#1a2a44');
+        ctx.shadowBlur  = isActive ? 18 : 5;
+        ctx.fillStyle   = isActive ? '#ffffff' : (isDone ? '#7aadcc' : '#243650');
+        ctx.font        = 'bold 42px monospace';
+        ctx.fillText(char, sx, boxTop + boxH / 2 + 2);
+        ctx.shadowBlur  = 0;
+      }
+
+      // Down arrow
+      ctx.globalAlpha = arrowA;
+      ctx.shadowColor = isActive ? '#00eeff' : 'transparent';
+      ctx.shadowBlur  = isActive ? 8 : 0;
+      ctx.fillStyle   = isActive ? '#00eeff' : '#2a4870';
+      ctx.font        = 'bold 18px monospace';
+      ctx.fillText('\u25bc', sx, boxTop + boxH + 22);
+      ctx.globalAlpha = 1;
+      ctx.shadowBlur  = 0;
+    });
+
+    // Controls hint
+    ctx.fillStyle = 'rgba(60,90,160,0.65)';
+    ctx.font      = '10px monospace';
+    ctx.fillText('\u25b2\u25bc CHANGE    \u25c4\u25ba MOVE    ENTER / CLICK TO CONFIRM', cx, boxTop + boxH + 72);
+
+    ctx.restore();
   }
 
   // ── Menu ──────────────────────────────────────────────────────────────────
@@ -66,13 +250,6 @@ export class Screens {
     const { width, height } = game.canvas;
     const cy = height * 0.38;
 
-    // Background gradient
-    const grad = ctx.createLinearGradient(0, 0, 0, height);
-    grad.addColorStop(0, '#060018');
-    grad.addColorStop(1, '#0e0030');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, width, height);
-
     // Stars
     stars.forEach(s => {
       ctx.beginPath();
@@ -112,6 +289,9 @@ export class Screens {
     // ── Play button (pulsating glow) ─────────────────────────────────────
     const playBlur = 10 + 16 * (0.5 + 0.5 * Math.sin(Date.now() / 480));
     this._drawMenuButton(width / 2, cy + 108, 200, 44, 'PLAY', '#5599ff', '#2244cc', playBlur);
+
+    // ── High score list ───────────────────────────────────────────────────
+    this._drawHighScores(width, height);
 
     // ── Corner icon buttons ───────────────────────────────────────────────
     const iconR = 18;
@@ -155,6 +335,124 @@ export class Screens {
       { skill: 'lightning',  x: cx - bw - 4, y: row2Y, w: bw, h: bh },
       { skill: 'multiball',  x: cx + 4,       y: row2Y, w: bw, h: bh },
     ];
+  }
+
+  _buildCrawlLines(scores) {
+    const lines = [];
+    lines.push(''); // 1 leading blank
+    if (scores.length === 0) {
+      lines.push({ text: 'NO SCORES YET',      type: 'sub' });
+      lines.push({ text: 'PLAY TO CLAIM A SPOT', type: 'sub' });
+      lines.push('', '');
+    } else {
+      scores.forEach((entry, i) => {
+        const num   = String(i + 1);
+        const inits = (entry.initials ?? '---').toUpperCase();
+        const score = entry.score.toLocaleString();
+        const type  = i === 0 ? 'top' : i < 3 ? 'hi' : 'normal';
+        lines.push({ text: `${num}  ${inits}  ${score}`, type });
+      });
+      lines.push('', '', '', '', '', ''); // trailing gap — ~7.5s pause before loop
+    }
+    // Normalise: bare strings → blank entries
+    return lines.map(l => typeof l === 'string' ? { text: '', type: 'gap' } : l);
+  }
+
+  _drawHighScores(width, height) {
+    const { ctx } = this;
+    const cy   = height * 0.38;
+    const vpX  = width / 2;
+
+    // Crawl region — no box, floats directly over the starfield
+    const PW           = 360;
+    const px           = (width - PW) / 2;
+    const CRAWL_TOP    = cy + 148;
+    const CRAWL_BOTTOM = height - 56; // just above gear/help buttons
+    const CRAWL_H      = CRAWL_BOTTOM - CRAWL_TOP;
+
+    // Time-based position — completely independent of framerate
+    const SPEED        = 0.032; // world units per ms ≈ 32 wu/sec (very slow)
+    const scrollOff    = (performance.now() - this._crawlStartTime) * SPEED + this._crawlY;
+
+    const FOCAL        = 350; // higher = gentler perspective, more lines readable
+    const LINE_H_WORLD = 40;  // compact spacing so all scores are close together
+
+    const contentLines = this._buildCrawlLines(this._highScores);
+    const totalWorldH  = contentLines.length * LINE_H_WORLD;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(px, CRAWL_TOP, PW, CRAWL_H);
+    ctx.clip();
+
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+
+    contentLines.forEach((line, i) => {
+      if (!line.text) return;
+
+      const rawZ = scrollOff - i * LINE_H_WORLD;
+      const z    = ((rawZ % totalWorldH) + totalWorldH) % totalWorldH;
+
+      const scale = FOCAL / (z + FOCAL);
+      if (scale < 0.03) return;
+
+      const screenY = CRAWL_BOTTOM - (z / (z + FOCAL)) * CRAWL_H;
+      if (screenY < CRAWL_TOP || screenY > CRAWL_BOTTOM) return;
+
+      // Fade near vanishing point
+      const fadeTop = Math.min(1, (screenY - CRAWL_TOP) / (CRAWL_H * 0.30));
+      const alpha   = fadeTop * Math.min(1, (scale - 0.03) / 0.05);
+      if (alpha <= 0) return;
+
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.translate(vpX, screenY);
+      // scaleX = perspective narrowing; scaleY * 0.52 = tilted-plane illusion
+      ctx.scale(scale, scale * 0.52);
+
+      switch (line.type) {
+        case 'top':
+          ctx.shadowColor = 'rgba(160,200,255,0.55)';
+          ctx.shadowBlur  = 10;
+          ctx.fillStyle   = 'rgba(210,228,255,0.97)';
+          ctx.font        = 'bold 28px monospace';
+          break;
+        case 'hi':
+          ctx.fillStyle = 'rgba(158,185,238,0.93)';
+          ctx.font      = 'bold 26px monospace';
+          break;
+        case 'date':
+          ctx.fillStyle = 'rgba(80,108,168,0.82)';
+          ctx.font      = '20px monospace';
+          break;
+        case 'sub':
+          ctx.fillStyle = 'rgba(95,122,178,0.80)';
+          ctx.font      = '24px monospace';
+          break;
+        default:
+          ctx.fillStyle = 'rgba(118,146,205,0.90)';
+          ctx.font      = 'bold 26px monospace';
+      }
+      ctx.fillText(line.text, 0, 0);
+      ctx.restore();
+    });
+
+    ctx.restore(); // end clip
+
+    // Fade overlay at top — text dissolves into the vanishing point
+    const topFade = ctx.createLinearGradient(0, CRAWL_TOP, 0, CRAWL_TOP + CRAWL_H * 0.18);
+    topFade.addColorStop(0, 'rgba(4,0,15,1)');
+    topFade.addColorStop(1, 'rgba(4,0,15,0)');
+    ctx.fillStyle = topFade;
+    ctx.fillRect(px, CRAWL_TOP, PW, CRAWL_H * 0.18);
+
+    // Fade overlay at bottom — text rises in smoothly
+    const botFade = ctx.createLinearGradient(0, CRAWL_BOTTOM - CRAWL_H * 0.08, 0, CRAWL_BOTTOM);
+    botFade.addColorStop(0, 'rgba(4,0,15,0)');
+    botFade.addColorStop(1, 'rgba(4,0,15,1)');
+    ctx.fillStyle = botFade;
+    ctx.fillRect(px, CRAWL_BOTTOM - CRAWL_H * 0.08, PW, CRAWL_H * 0.08);
   }
 
   _buildTitlePegs(width, titleCY) {

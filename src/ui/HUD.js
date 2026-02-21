@@ -238,7 +238,7 @@ export class HUD {
     // ── Stacked ball spheres (each coloured by its skill slot) ────
     const visible  = Math.min(count, maxVis);
     // remaining[0] = next to fire (drawn at bottom, i=0)
-    const remaining = game.ballSlots.slice(10 - count);
+    const remaining = game.ballSlots.slice(game._ballsConsumed);
 
     for (let i = 0; i < visible; i++) {
       const bx = cx;

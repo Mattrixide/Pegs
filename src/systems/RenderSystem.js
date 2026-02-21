@@ -36,6 +36,11 @@ export class RenderSystem {
       return;
     }
 
+    if (game.state === 'ENTER_INITIALS') {
+      game.screens.drawInitialEntry(this.stars);
+      return;
+    }
+
     this._drawBackground();
     this._drawPegs();
     this._drawBall();

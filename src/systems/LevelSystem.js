@@ -10,7 +10,7 @@ export class LevelSystem {
   }
 
   get currentLevel() { return levels[this.currentIndex]; }
-  get hasNextLevel()  { return this.currentIndex < levels.length - 1; }
+  get hasNextLevel()  { return this.currentIndex < Math.min(levels.length - 1, 2); }
   get totalLevels()   { return levels.length; }
 
   load(index) {

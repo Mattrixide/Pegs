@@ -14,15 +14,16 @@ import { Screens }        from '../ui/Screens.js';
 
 // ── States ────────────────────────────────────────────────────────────────────
 export const STATE = {
-  MENU:        'MENU',
-  AIMING:      'AIMING',
-  SHOOTING:    'SHOOTING',
-  ROUND_END:   'ROUND_END',
-  FINAL_CATCH: 'FINAL_CATCH',
-  FEVER:       'FEVER',
-  LEVEL_CLEAR: 'LEVEL_CLEAR',
-  GAME_OVER:   'GAME_OVER',
-  VICTORY:     'VICTORY',
+  MENU:           'MENU',
+  AIMING:         'AIMING',
+  SHOOTING:       'SHOOTING',
+  ROUND_END:      'ROUND_END',
+  FINAL_CATCH:    'FINAL_CATCH',
+  FEVER:          'FEVER',
+  LEVEL_CLEAR:    'LEVEL_CLEAR',
+  GAME_OVER:      'GAME_OVER',
+  VICTORY:        'VICTORY',
+  ENTER_INITIALS: 'ENTER_INITIALS',
 };
 
 // Final catch bucket layout
@@ -110,6 +111,7 @@ export class Game {
 
   startGame(levelIndex = 0) {
     this.ballCount          = 10;
+    this._ballsConsumed     = 0;
     this.feverTimer         = 0;
     this.balls              = [];
     this.superGuideActive   = false;
@@ -130,6 +132,7 @@ export class Game {
 
   _loadNextLevel() {
     this.ballCount          = 10;
+    this._ballsConsumed     = 0;
     this.feverTimer         = 0;
     this.balls              = [];
     this.superGuideActive   = false;
@@ -194,7 +197,8 @@ export class Game {
       case STATE.ROUND_END:   this._updateRoundEnd();     break;
       case STATE.FINAL_CATCH: this._updateFinalCatch();   break;
       case STATE.FEVER:       this._updateFever();        break;
-      case STATE.LEVEL_CLEAR: this._updateLevelClear();   break;
+      case STATE.LEVEL_CLEAR:    this._updateLevelClear();     break;
+      case STATE.ENTER_INITIALS: this.screens.tickInitialEntry(); break;
     }
     if (this.bucket.visible) this.bucket.update();
     this.particles.update();
@@ -208,8 +212,7 @@ export class Game {
   // ── State updates ──────────────────────────────────────────────────────────
 
   _updateAiming() {
-    const nextSlotIdx     = 10 - this.ballCount;
-    this.superGuideActive = this.ballSlots[nextSlotIdx] === 'superGuide';
+    this.superGuideActive = this.ballSlots[this._ballsConsumed] === 'superGuide';
     this.launcher.setAngleFromMouse(this.mouse.x, this.mouse.y);
   }
 
@@ -286,6 +289,8 @@ export class Game {
             this.score.awardBucketBonus();
             this.particles.spawnBucketCatch(this.bucket.x, this.bucket.y);
             this.audio.playBucketCatch();
+            // Insert the caught ball's skill back at the next-to-fire position
+            this.ballSlots.splice(this._ballsConsumed, 0, this.currentBallSkill ?? null);
             this.ballCount++;
             this.balls.splice(bi, 1);
             if (this.balls.length === 0) {
@@ -483,7 +488,7 @@ export class Game {
       this._beginFever();
     } else if (this.ballCount <= 0) {
       this.audio.playGameOver();
-      this._setState(STATE.GAME_OVER);
+      this._enterInitials(false);
     } else {
       this._setState(STATE.AIMING);
     }
@@ -539,7 +544,7 @@ export class Game {
       if (this.levelSystem.hasNextLevel) {
         this._loadNextLevel();
       } else {
-        this._setState(STATE.VICTORY);
+        this._enterInitials(true);
       }
     }
   }
@@ -578,16 +583,80 @@ export class Game {
           this._fireBall();
           break;
         }
+        case STATE.ENTER_INITIALS: {
+          const CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+          const rects = this.screens.getInitialEntryRects(this.canvas.width, this.canvas.height);
+          let handled = false;
+          rects.forEach((r, si) => {
+            if (hit(r.up)) {
+              const idx = CHARS.indexOf(this.screens._initials[si]);
+              this.screens._initials[si] = CHARS[(idx + 1) % 26];
+              handled = true;
+            } else if (hit(r.down)) {
+              const idx = CHARS.indexOf(this.screens._initials[si]);
+              this.screens._initials[si] = CHARS[(idx - 1 + 26) % 26];
+              handled = true;
+            }
+          });
+          if (!handled) this._advanceInitial();
+          break;
+        }
         case STATE.GAME_OVER: this._setState(STATE.MENU); break;
         case STATE.VICTORY:   this.startGame(0);          break;
       }
     });
+
+    document.addEventListener('keydown', e => {
+      if (this.state !== STATE.ENTER_INITIALS) return;
+      const CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+      const pos = this.screens._initialsPos;
+      const idx = CHARS.indexOf(this.screens._initials[pos]);
+      switch (e.key) {
+        case 'ArrowUp':   case 'w': case 'W':
+          this.screens._initials[pos] = CHARS[(idx + 1) % 26]; break;
+        case 'ArrowDown': case 's': case 'S':
+          this.screens._initials[pos] = CHARS[(idx - 1 + 26) % 26]; break;
+        case 'ArrowLeft':
+          if (pos > 0) this.screens._initialsPos--; break;
+        case 'ArrowRight': case 'Enter': case ' ':
+          this._advanceInitial(); break;
+        default: return;
+      }
+      e.preventDefault();
+    });
+
+    this.canvas.addEventListener('wheel', e => {
+      if (this.state !== STATE.MENU) return;
+      e.preventDefault();
+      // Scrub the Star Wars crawl manually with the mouse wheel
+      this.screens._crawlY += e.deltaY * 1.5;
+    }, { passive: false });
+  }
+
+  _enterInitials(isVictory) {
+    this._pendingVictory = isVictory;
+    this.screens.initInitialEntry(this.score.totalScore, isVictory);
+    this._setState(STATE.ENTER_INITIALS);
+  }
+
+  _advanceInitial() {
+    if (this.screens._initialsPos < 2) {
+      this.screens._initialsPos++;
+    } else {
+      this._confirmInitials();
+    }
+  }
+
+  _confirmInitials() {
+    const initials = this.screens._initials.join('');
+    this.screens.addScore(this.screens._ieScore, initials);
+    this._setState(STATE.MENU);
   }
 
   _fireBall() {
     if (this.ballCount <= 0) return;
-    const slotIdx         = 10 - this.ballCount;
-    this.currentBallSkill = this.ballSlots[slotIdx] ?? null;
+    this.currentBallSkill = this.ballSlots[this._ballsConsumed] ?? null;
+    this._ballsConsumed++;
     this.ballPegHitCount  = 0;
     const launch = this.launcher.fire();
     this.balls        = [new Ball(launch.x, launch.y, launch.vx, launch.vy)];
