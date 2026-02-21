@@ -120,6 +120,15 @@ export class Screens {
 
     ctx.restore();
 
+    // ── Version number (lower-left) ───────────────────────────────────────
+    ctx.save();
+    ctx.font         = '11px monospace';
+    ctx.fillStyle    = 'rgba(180,180,220,0.45)';
+    ctx.textAlign    = 'left';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(`v${game.version}`, 10, height - 8);
+    ctx.restore();
+
     if (this._showHelp) this._drawHelpOverlay(width, height);
   }
 

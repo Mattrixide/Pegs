@@ -46,7 +46,8 @@ export const SKILLS = [
 ];
 
 export class Game {
-  constructor(canvas) {
+  constructor(canvas, version = '0.0.0') {
+    this.version = version;
     this.canvas  = canvas;
     this.ctx     = canvas.getContext('2d');
     this.width   = canvas.width;
