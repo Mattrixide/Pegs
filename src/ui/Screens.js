@@ -672,7 +672,7 @@ export class Screens {
       ['BLUE',   '+10 pts per peg hit'],
       ['ORANGE', '+100 pts per peg hit'],
       ['PURPLE', '+500 pts per peg hit'],
-      ['GREEN',  'Activates your selected skill power'],
+      ['GREEN',  'Triggers the carried skill (Lightning, Multi Ball)'],
     ];
     ctx.textBaseline = 'middle';
     ctx.textAlign    = 'left';
@@ -702,13 +702,13 @@ export class Screens {
     ctx.textAlign = 'left';
     ctx.fillStyle = 'rgba(140,160,210,0.60)';
     ctx.font      = '10px Arial';
-    ctx.fillText('Click the ball counter to switch skills', lx, skillDivY + 30);
+    ctx.fillText('4 of 10 balls are randomly assigned a skill', lx, skillDivY + 30);
     // Skill rows
     const skillRows = [
-      { label: 'SUPER GUIDE',  color: '#44ff88', desc: 'Shows extended aim trajectory' },
+      { label: 'SUPER GUIDE',  color: '#44ff88', desc: 'Extended aim guide — active while aiming' },
       { label: 'SPOOKY BALL',  color: '#cc88ff', desc: 'Ball returns from the top when it falls' },
-      { label: 'LIGHTNING',    color: '#ffff44', desc: 'Green peg zaps nearby pegs' },
-      { label: 'MULTI BALL',   color: '#ff8844', desc: 'Green peg spawns 2 extra balls' },
+      { label: 'LIGHTNING',    color: '#ffff44', desc: 'Zaps nearby pegs — triggers every 3rd hit' },
+      { label: 'MULTI BALL',   color: '#ff8844', desc: 'Spawns 2 extra balls every 3rd peg hit' },
     ];
     skillRows.forEach((s, i) => {
       const ry = skillDivY + 46 + i * 24;
